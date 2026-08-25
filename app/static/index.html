@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RAG Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0F1E24;
+    --bg-panel: #15272E;
+    --bg-panel-2: #1B333B;
+    --bg-input: #10222A;
+    --border: #2A4750;
+    --border-soft: #1F3A42;
+    --text: #E8EDE9;
+    --text-dim: #8FA6A0;
+    --text-faint: #5E7770;
+    --gold: #E3A857;
+    --green: #7FA88C;
+    --red: #C1554D;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  a { color: var(--gold); }
+
+  ::selection { background: var(--gold); color: var(--bg); }
+
+  button {
+    font-family: var(--sans);
+    cursor: pointer;
+  }
+
+  input, textarea, select {
+    font-family: var(--mono);
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 13px;
+    width: 100%;
+  }
+  input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--gold);
+  }
+  input::placeholder, textarea::placeholder { color: var(--text-faint); }
+
+  /* -------------------------------------------------- layout shell */
+
+  .shell {
+    display: grid;
+    grid-template-columns: 260px 1fr 340px;
+    grid-template-rows: auto 1fr;
+    min-height: 100vh;
+  }
+  header.top {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  header.top .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--gold);
+    text-transform: uppercase;
+  }
+  header.top h1 {
+    font-family: var(--mono);
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  header.top .status {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-faint);
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.03);
+    transition: background 0.2s;
+  }
+  .dot.up { background: var(--green); box-shadow: 0 0 0 3px rgba(127,168,140,0.15); }
+  .dot.down { background: var(--red); box-shadow: 0 0 0 3px rgba(193,85,77,0.15); }
+
+  .sidebar {
+    border-right: 1px solid var(--border-soft);
+    padding: 20px 18px;
+    overflow-y: auto;
+  }
+  .main {
+    padding: 20px 24px;
+    overflow-y: auto;
+  }
+  .manifest-rail {
+    border-left: 1px solid var(--border-soft);
+    padding: 20px 18px;
+    overflow-y: auto;
+  }
+
+  .panel-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    margin: 0 0 10px 0;
+  }
+
+  .field { margin-bottom: 12px; }
+  .field label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 5px;
+  }
+  .hint { font-size: 11px; color: var(--text-faint); margin-top: 4px; }
+
+  .btn {
+    background: var(--bg-panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 4px;
+    padding: 8px 14px;
+    font-size: 13px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .btn:hover { border-color: var(--text-dim); }
+  .btn.primary {
+    background: var(--gold);
+    border-color: var(--gold);
+    color: #1A1305;
+    font-weight: 600;
+  }
+  .btn.primary:hover { background: #EDB868; }
+  .btn.danger { color: var(--red); }
+  .btn.danger:hover { border-color: var(--red); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-row { display: flex; gap: 8px; margin-top: 12px; }
+
+  hr.rule {
+    border: none;
+    border-top: 1px solid var(--border-soft);
+    margin: 18px 0;
+  }
+
+  /* -------------------------------------------------- documents list */
+
+  #docList { display: flex; flex-direction: column; gap: 8px; }
+  .doc-card {
+    background: var(--bg-panel-2);
+    border: 1px solid var(--border-soft);
+    border-radius: 5px;
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+  .doc-card .title { font-weight: 600; margin-bottom: 3px; word-break: break-word; }
+  .doc-card .meta { color: var(--text-faint); font-family: var(--mono); font-size: 10.5px; }
+  .doc-card .row { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+  .doc-card .del {
+    background: none; border: none; color: var(--text-faint);
+    font-size: 11px; padding: 2px 4px;
+  }
+  .doc-card .del:hover { color: var(--red); }
+  .empty-note { color: var(--text-faint); font-size: 12px; font-style: italic; }
+
+  /* -------------------------------------------------- tabs */
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--border-soft); }
+  .tab {
+    background: none; border: none; color: var(--text-faint);
+    font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.03em;
+    padding: 9px 4px; margin-right: 18px;
+    border-bottom: 2px solid transparent;
+  }
+  .tab.active { color: var(--text); border-bottom-color: var(--gold); }
+
+  .subtabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  .subtab {
+    background: var(--bg-panel-2); border: 1px solid var(--border-soft); color: var(--text-dim);
+    border-radius: 4px; padding: 5px 12px; font-size: 12px;
+  }
+  .subtab.active { border-color: var(--gold); color: var(--gold); }
+
+  .pane { display: none; }
+  .pane.active { display: block; }
+
+  .dropzone {
+    border: 1.5px dashed var(--border);
+    border-radius: 6px;
+    padding: 28px 16px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 12.5px;
+    margin-bottom: 14px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .dropzone.hover { border-color: var(--gold); background: rgba(227,168,87,0.05); }
+  .dropzone .file-chip {
+    display: inline-block; margin-top: 8px; font-family: var(--mono);
+    color: var(--gold); font-size: 12px;
+  }
+
+  textarea#pasteContent { min-height: 160px; resize: vertical; font-family: var(--mono); font-size: 12.5px; }
+  textarea#queryText { min-height: 70px; resize: vertical; }
+
+  .slider-row { display: flex; align-items: center; gap: 10px; }
+  .slider-row input[type=range] { flex: 1; }
+  .slider-row .val { font-family: var(--mono); font-size: 12px; color: var(--gold); width: 24px; text-align: right; }
+
+  /* -------------------------------------------------- answer / sources */
+
+  .answer-box {
+    background: var(--bg-panel);
+    border: 1px solid var(--border-soft);
+    border-radius: 6px;
+    padding: 16px;
+    margin-top: 16px;
+    white-space: pre-wrap;
+    font-size: 13.5px;
+  }
+  .answer-box .label { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; color: var(--text-faint); text-transform: uppercase; margin-bottom: 8px; }
+
+  .source-card {
+    background: var(--bg-panel-2);
+    border: 1px solid var(--border-soft);
+    border-radius: 5px;
+    padding: 10px 12px;
+    margin-top: 8px;
+    font-size: 12.5px;
+  }
+  .source-card .top-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .source-card .doc-title { font-weight: 600; }
+  .score-bar { height: 4px; background: var(--bg-input); border-radius: 2px; overflow: hidden; margin: 6px 0; }
+  .score-bar .fill { height: 100%; background: var(--green); }
+  .source-card .snippet { color: var(--text-dim); font-family: var(--mono); font-size: 11.5px; }
+
+  /* -------------------------------------------------- manifest rail (signature element) */
+
+  .stamp {
+    border: 1.5px solid var(--gold);
+    border-radius: 6px;
+    padding: 12px 14px;
+    position: relative;
+    margin-bottom: 14px;
+    animation: stampIn 0.22s ease-out;
+  }
+  .stamp.err { border-color: var(--red); }
+  @keyframes stampIn {
+    from { transform: scale(0.94) rotate(-1.2deg); opacity: 0; }
+    to   { transform: scale(1) rotate(0deg); opacity: 1; }
+  }
+  .stamp .verdict {
+    font-family: var(--mono); font-weight: 600; font-size: 12px;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--gold);
+    transform: rotate(-3deg);
+    display: inline-block;
+    margin-bottom: 8px;
+  }
+  .stamp.err .verdict { color: var(--red); }
+  .stamp .kv { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 11px; margin-top: 4px; color: var(--text-dim); gap: 8px; }
+  .stamp .kv b { color: var(--text); font-weight: 500; word-break: break-all; text-align: right; }
+
+  .raw-json {
+    background: var(--bg-input);
+    border: 1px solid var(--border-soft);
+    border-radius: 5px;
+    padding: 10px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--text-dim);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 420px;
+    overflow-y: auto;
+  }
+
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: var(--red); color: #fff; padding: 10px 18px; border-radius: 5px;
+    font-size: 13px; font-family: var(--mono); box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+    z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; grid-template-rows: auto auto auto auto; }
+    .sidebar, .manifest-rail { border: none; border-top: 1px solid var(--border-soft); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stamp { animation: none; }
+  }
+
+  :focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <header class="top">
+    <span class="eyebrow">local instance</span>
+    <h1>RAG Console</h1>
+    <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">checking…</span></div>
+  </header>
+
+  <!-- ---------------------------------------------------------- sidebar -->
+  <aside class="sidebar">
+    <p class="panel-label">Connection</p>
+    <div class="field">
+      <label for="baseUrl">API base URL</label>
+      <input id="baseUrl" value="" />
+    </div>
+    <div class="field">
+      <label for="apiKey">API key <span style="color:var(--text-faint)">(key_id:secret)</span></label>
+      <input id="apiKey" placeholder="demo:password" />
+      <p class="hint">Sent as <code>Authorization: Bearer …</code>. Stored only in this browser's localStorage.</p>
+    </div>
+    <button class="btn primary" id="saveConnBtn" style="width:100%">Save</button>
+
+    <hr class="rule" />
+
+    <div class="row" style="display:flex; justify-content:space-between; align-items:center;">
+      <p class="panel-label" style="margin:0;">Documents</p>
+      <button class="btn" id="refreshDocsBtn" style="padding:4px 8px; font-size:11px;">Refresh</button>
+    </div>
+    <div id="docList" style="margin-top:10px;"><p class="empty-note">Not loaded yet.</p></div>
+  </aside>
+
+  <!-- ------------------------------------------------------------- main -->
+  <main class="main">
+    <div class="tabs">
+      <button class="tab active" data-tab="ingest">Ingest</button>
+      <button class="tab" data-tab="query">Query</button>
+    </div>
+
+    <!-- Ingest pane -->
+    <section class="pane active" id="pane-ingest">
+      <div class="subtabs">
+        <button class="subtab active" data-subtab="upload">Upload file</button>
+        <button class="subtab" data-subtab="paste">Paste text</button>
+      </div>
+
+      <div class="pane active" id="sub-upload">
+        <div class="dropzone" id="dropzone">
+          Drag a .txt, .md, .pdf, or .docx file here, or click to choose one.
+          <div><input type="file" id="fileInput" accept=".txt,.md,.pdf,.docx" style="display:none" /></div>
+          <div class="file-chip" id="fileChip"></div>
+        </div>
+        <div class="field">
+          <label for="uploadTitle">Title <span style="color:var(--text-faint)">(optional — defaults to filename)</span></label>
+          <input id="uploadTitle" placeholder="Leave blank to use the filename" />
+        </div>
+        <div class="field">
+          <label for="uploadSource">Source <span style="color:var(--text-faint)">(optional)</span></label>
+          <input id="uploadSource" placeholder="e.g. product-manual-v3" />
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" id="uploadBtn">Ingest file</button>
+        </div>
+      </div>
+
+      <div class="pane" id="sub-paste">
+        <div class="field">
+          <label for="pasteTitle">Title</label>
+          <input id="pasteTitle" placeholder="e.g. Refund Policy" />
+        </div>
+        <div class="field">
+          <label for="pasteContent">Content</label>
+          <textarea id="pasteContent" placeholder="Paste the document text here…"></textarea>
+        </div>
+        <div class="field">
+          <label for="pasteSource">Source <span style="color:var(--text-faint)">(optional)</span></label>
+          <input id="pasteSource" placeholder="e.g. handbook" />
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" id="pasteBtn">Ingest text</button>
+        </div>
+        <p class="hint">This page computes a SHA-256 checksum of the text in your browser before sending it, and the server verifies it matches — the manifest on the right shows whether it did.</p>
+      </div>
+    </section>
+
+    <!-- Query pane -->
+    <section class="pane" id="pane-query">
+      <div class="field">
+        <label for="queryText">Question</label>
+        <textarea id="queryText" placeholder="Ask something about your ingested documents…"></textarea>
+      </div>
+      <div class="field" style="max-width:220px;">
+        <label for="topK">Top K <span class="val" id="topKVal">5</span></label>
+        <div class="slider-row">
+          <input type="range" id="topK" min="1" max="20" value="5" />
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="queryBtn">Ask</button>
+      </div>
+
+      <div id="answerArea"></div>
+    </section>
+  </main>
+
+  <!-- -------------------------------------------------------- manifest rail -->
+  <aside class="manifest-rail">
+    <p class="panel-label">Request Manifest</p>
+    <div id="manifestList"><p class="empty-note">Send a request to see its integrity details here.</p></div>
+  </aside>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+  const baseUrlInput = $('#baseUrl');
+  const apiKeyInput = $('#apiKey');
+
+  // ---------------------------------------------------------- persistence
+  baseUrlInput.value = localStorage.getItem('rag_base_url') || window.location.origin;
+  apiKeyInput.value = localStorage.getItem('rag_api_key') || '';
+
+  $('#saveConnBtn').addEventListener('click', () => {
+    localStorage.setItem('rag_base_url', baseUrlInput.value.trim());
+    localStorage.setItem('rag_api_key', apiKeyInput.value.trim());
+    showToast('Connection saved');
+    checkHealth();
+    loadDocuments();
+  });
+
+  function showToast(msg, isError) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.style.background = isError ? 'var(--red)' : 'var(--green)';
+    t.classList.add('show');
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.remove('show'), 3200);
+  }
+
+  // -------------------------------------------------------------- fetch helper
+  async function api(path, options) {
+    options = options || {};
+    const base = baseUrlInput.value.trim().replace(/\/$/, '');
+    const key = apiKeyInput.value.trim();
+    const headers = options.headers || {};
+    if (key) headers['Authorization'] = 'Bearer ' + key;
+    const start = performance.now();
+    let res, body, isJson = true;
+    try {
+      res = await fetch(base + path, { ...options, headers });
+    } catch (e) {
+      throw { network: true, message: 'Could not reach ' + base + ' — is the server running and CORS-allowed?' };
+    }
+    const clientLatency = Math.round(performance.now() - start);
+    const text = await res.text();
+    try { body = text ? JSON.parse(text) : {}; } catch (e) { isJson = false; body = text; }
+
+    if (!res.ok) {
+      const err = (isJson && body.error) ? body.error : { code: 'unknown_error', message: String(body).slice(0, 200), request_id: '-' };
+      throw { apiError: true, status: res.status, err, clientLatency };
+    }
+    return { body, status: res.status, clientLatency };
+  }
+
+  async function sha256Hex(str) {
+    const enc = new TextEncoder().encode(str);
+    const digest = await crypto.subtle.digest('SHA-256', enc);
+    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function shortHash(h) { return h ? h.slice(0, 10) + '…' + h.slice(-6) : '—'; }
+
+  // ------------------------------------------------------------- manifest
+  function pushManifest({ ok, title, request_id, latency_ms, checksum_note, extra, rawBody }) {
+    const list = $('#manifestList');
+    const empty = list.querySelector('.empty-note');
+    if (empty) empty.remove();
+
+    const card = document.createElement('div');
+    card.className = 'stamp' + (ok ? '' : ' err');
+    card.innerHTML = `
+      <div class="verdict">${ok ? '✓ verified' : '✕ ' + (extra && extra.code || 'error')}</div>
+      <div class="kv"><span>action</span><b>${title}</b></div>
+      <div class="kv"><span>request_id</span><b>${request_id || '—'}</b></div>
+      ${latency_ms != null ? `<div class="kv"><span>server latency</span><b>${latency_ms} ms</b></div>` : ''}
+      ${checksum_note ? `<div class="kv"><span>checksum</span><b>${checksum_note}</b></div>` : ''}
+    `;
+    list.prepend(card);
+
+    if (rawBody) {
+      const raw = document.createElement('div');
+      raw.className = 'raw-json';
+      raw.style.marginBottom = '14px';
+      raw.textContent = JSON.stringify(rawBody, null, 2);
+      list.insertBefore(raw, card.nextSibling);
+    }
+
+    while (list.children.length > 24) list.removeChild(list.lastChild);
+  }
+
+  function handleApiError(e, actionTitle) {
+    if (e.network) {
+      showToast(e.message, true);
+      pushManifest({ ok: false, title: actionTitle, request_id: '—', extra: { code: 'network_error' } });
+      return;
+    }
+    if (e.apiError) {
+      showToast(`${e.err.code}: ${e.err.message}`, true);
+      pushManifest({ ok: false, title: actionTitle, request_id: e.err.request_id, extra: { code: e.err.code }, rawBody: e.err });
+      return;
+    }
+    showToast('Unexpected error — see console', true);
+    console.error(e);
+  }
+
+  // -------------------------------------------------------------- health
+  async function checkHealth() {
+    const dot = $('#statusDot'), text = $('#statusText');
+    try {
+      const { body } = await api('/health');
+      dot.className = 'dot up';
+      text.textContent = `${body.service} · v${body.version}`;
+    } catch (e) {
+      dot.className = 'dot down';
+      text.textContent = 'unreachable';
+    }
+  }
+
+  // --------------------------------------------------------------- tabs
+  $$('.tab').forEach(tab => tab.addEventListener('click', () => {
+    $$('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    $$('#pane-ingest, #pane-query').forEach(p => p.classList.remove('active'));
+    $('#pane-' + tab.dataset.tab).classList.add('active');
+  }));
+
+  $$('.subtab').forEach(st => st.addEventListener('click', () => {
+    $$('.subtab').forEach(t => t.classList.remove('active'));
+    st.classList.add('active');
+    $('#sub-upload').classList.remove('active');
+    $('#sub-paste').classList.remove('active');
+    $('#sub-' + st.dataset.subtab).classList.add('active');
+  }));
+
+  // ---------------------------------------------------------- documents
+  async function loadDocuments() {
+    const list = $('#docList');
+    list.innerHTML = '<p class="empty-note">Loading…</p>';
+    try {
+      const { body } = await api('/v1/documents?limit=100');
+      if (!body.documents.length) {
+        list.innerHTML = '<p class="empty-note">No documents ingested yet.</p>';
+        return;
+      }
+      list.innerHTML = '';
+      body.documents.forEach(doc => {
+        const card = document.createElement('div');
+        card.className = 'doc-card';
+        card.innerHTML = `
+          <div class="title">${escapeHtml(doc.title)}</div>
+          <div class="meta">${doc.chunk_count} chunk${doc.chunk_count === 1 ? '' : 's'} · ${shortHash(doc.content_sha256)}</div>
+          <div class="row">
+            <span class="meta">${doc.document_id}</span>
+            <button class="del" data-id="${doc.document_id}">delete</button>
+          </div>
+        `;
+        card.querySelector('.del').addEventListener('click', () => deleteDocument(doc.document_id));
+        list.appendChild(card);
+      });
+    } catch (e) {
+      list.innerHTML = '<p class="empty-note">Could not load documents.</p>';
+      handleApiError(e, 'list documents');
+    }
+  }
+
+  async function deleteDocument(id) {
+    if (!confirm('Delete document ' + id + '? This removes its vectors too.')) return;
+    try {
+      const { body, status } = await api('/v1/documents/' + encodeURIComponent(id), { method: 'DELETE' });
+      showToast('Deleted ' + id);
+      pushManifest({ ok: true, title: 'delete document', request_id: body.document_id ? undefined : undefined, latency_ms: null, rawBody: body });
+      loadDocuments();
+    } catch (e) {
+      handleApiError(e, 'delete document');
+    }
+  }
+
+  $('#refreshDocsBtn').addEventListener('click', loadDocuments);
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  // -------------------------------------------------------- upload/paste
+  const dropzone = $('#dropzone'), fileInput = $('#fileInput'), fileChip = $('#fileChip');
+  let selectedFile = null;
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => setFile(fileInput.files[0]));
+  ['dragover', 'dragenter'].forEach(evt => dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add('hover'); }));
+  ['dragleave', 'drop'].forEach(evt => dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove('hover'); }));
+  dropzone.addEventListener('drop', (e) => { if (e.dataTransfer.files.length) setFile(e.dataTransfer.files[0]); });
+
+  function setFile(f) {
+    selectedFile = f;
+    fileChip.textContent = f ? `${f.name} (${(f.size / 1024).toFixed(1)} KB)` : '';
+  }
+
+  $('#uploadBtn').addEventListener('click', async () => {
+    if (!selectedFile) { showToast('Choose a file first', true); return; }
+    const btn = $('#uploadBtn');
+    btn.disabled = true;
+    try {
+      const form = new FormData();
+      form.append('file', selectedFile);
+      const title = $('#uploadTitle').value.trim();
+      const source = $('#uploadSource').value.trim();
+      if (title) form.append('title', title);
+      if (source) form.append('source', source);
+
+      const { body, clientLatency } = await api('/v1/documents/upload', { method: 'POST', body: form });
+      showToast(`Ingested "${selectedFile.name}" → ${body.chunk_count} chunk(s)`);
+      pushManifest({
+        ok: true, title: 'upload ' + selectedFile.name, request_id: body.document_id,
+        checksum_note: shortHash(body.content_sha256) + ' (server-computed)',
+        rawBody: body,
+      });
+      setFile(null); fileInput.value = '';
+      loadDocuments();
+    } catch (e) {
+      handleApiError(e, 'upload ' + (selectedFile ? selectedFile.name : 'file'));
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  $('#pasteBtn').addEventListener('click', async () => {
+    const title = $('#pasteTitle').value.trim();
+    const content = $('#pasteContent').value;
+    const source = $('#pasteSource').value.trim();
+    if (!title || !content.trim()) { showToast('Title and content are required', true); return; }
+
+    const btn = $('#pasteBtn');
+    btn.disabled = true;
+    try {
+      const clientChecksum = await sha256Hex(content);
+      const payload = { title, content, content_sha256: clientChecksum, metadata: {} };
+      if (source) payload.source = source;
+
+      const { body } = await api('/v1/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const matched = body.content_sha256 === clientChecksum;
+      showToast(`Ingested "${title}" → ${body.chunk_count} chunk(s)`);
+      pushManifest({
+        ok: true, title: 'ingest "' + title + '"', request_id: body.document_id,
+        checksum_note: (matched ? 'match ✓ ' : 'MISMATCH ') + shortHash(clientChecksum),
+        rawBody: body,
+      });
+      $('#pasteContent').value = ''; $('#pasteTitle').value = ''; $('#pasteSource').value = '';
+      loadDocuments();
+    } catch (e) {
+      handleApiError(e, 'ingest "' + title + '"');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // -------------------------------------------------------------- query
+  const topK = $('#topK'), topKVal = $('#topKVal');
+  topK.addEventListener('input', () => topKVal.textContent = topK.value);
+
+  $('#queryBtn').addEventListener('click', async () => {
+    const q = $('#queryText').value.trim();
+    if (!q) { showToast('Enter a question first', true); return; }
+    const btn = $('#queryBtn');
+    btn.disabled = true;
+    $('#answerArea').innerHTML = '<p class="empty-note" style="margin-top:16px;">Thinking…</p>';
+    try {
+      const { body } = await api('/v1/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q, top_k: parseInt(topK.value, 10) }),
+      });
+      renderAnswer(body);
+      pushManifest({
+        ok: true, title: 'query', request_id: body.request_id, latency_ms: body.latency_ms,
+        checksum_note: `${body.retrieved_count} chunk(s) via ${body.generation_provider}`,
+        rawBody: body,
+      });
+    } catch (e) {
+      $('#answerArea').innerHTML = '';
+      handleApiError(e, 'query');
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  function renderAnswer(body) {
+    const area = $('#answerArea');
+    let html = `<div class="answer-box"><div class="label">Answer · ${body.generation_provider} · ${body.latency_ms}ms</div>${escapeHtml(body.answer)}</div>`;
+    if (body.sources && body.sources.length) {
+      html += '<div style="margin-top:14px;" class="panel-label">Sources</div>';
+      body.sources.forEach((s, i) => {
+        const pct = Math.max(2, Math.min(100, Math.round(s.score * 100)));
+        html += `
+          <div class="source-card">
+            <div class="top-row">
+              <span class="doc-title">[${i + 1}] ${escapeHtml(s.document_title || s.document_id)}</span>
+              <span style="color:var(--text-faint)">score ${s.score.toFixed(3)}</span>
+            </div>
+            <div class="score-bar"><div class="fill" style="width:${pct}%"></div></div>
+            <div class="snippet">${escapeHtml(s.text.slice(0, 220))}${s.text.length > 220 ? '…' : ''}</div>
+          </div>
+        `;
+      });
+    }
+    area.innerHTML = html;
+  }
+
+  // ------------------------------------------------------------- boot
+  checkHealth();
+  loadDocuments();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+numpy
+faiss-cpu        # optional; falls back to numpy brute-force store if unavailable
+sentence-transformers   # optional; falls back to deterministic hash embedder if unavailable
+anthropic              # optional generation provider
+openai                 # optional generation provider
+google-genai             # optional generation provider (Gemini)
+tiktoken                # optional; falls back to whitespace tokenizer
+python-multipart        # file uploads
+pypdf                   # optional; PDF text extraction for /v1/documents/upload
+python-docx             # optional; DOCX text extraction for /v1/documents/upload
+slowapi                 # reference impl only; app ships its own rate limiter
+python-dotenv
+httpx
+pytest
+pytest-asyncio

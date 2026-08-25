@@ -1,0 +1,36 @@
+services:
+  rag-api:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - VECTOR_STORE_PATH=/app/data/vector_store
+      - METADATA_DB_PATH=/app/data/metadata.sqlite3
+    volumes:
+      - rag_data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+
+volumes:
+  rag_data:
+
+# Notes for scaling beyond this reference compose file:
+#   - Swap VectorStore's numpy/FAISS backend for a networked vector DB
+#     (pgvector, Qdrant) so multiple rag-api replicas share one index.
+#   - Swap DocumentStore's SQLite file for Postgres for the same reason.
+#   - Swap RateLimiter's in-memory buckets for Redis so rate limits are
+#     enforced consistently across replicas.
+#   - Put this service behind a reverse proxy / API gateway (nginx, Envoy)
+#     for TLS termination and an additional layer of request throttling.
